@@ -1,0 +1,170 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum EventStatus {
+  DRAFT
+  RUNNING
+  ENDED
+}
+
+enum QuestionType {
+  MCQ
+  SHORT_ANSWER
+}
+
+enum LoginActor {
+  TEAM
+  ADMIN
+}
+
+model Admin {
+  id           String    @id @default(cuid())
+  email        String    @unique
+  passwordHash String
+  createdAt    DateTime  @default(now())
+  sessions     Session[]
+  loginAudits  LoginAudit[]
+}
+
+model Team {
+  id               String          @id @default(cuid())
+  teamId           String          @unique
+  name             String          @unique
+  accessCodeHash   String
+  section          String?
+  currentLevel     Int             @default(1)
+  totalScore       Int             @default(0)
+  lastSubmissionAt DateTime?
+  createdAt        DateTime        @default(now())
+  updatedAt        DateTime        @updatedAt
+  members          TeamMember[]
+  sessions         Session[]
+  submissions      Submission[]
+  progress         LevelProgress[]
+  loginAudits      LoginAudit[]
+
+  @@index([totalScore, lastSubmissionAt])
+  @@index([currentLevel])
+}
+
+model TeamMember {
+  id        String   @id @default(cuid())
+  name      String
+  teamId    String
+  createdAt DateTime @default(now())
+  team      Team     @relation(fields: [teamId], references: [id], onDelete: Cascade)
+
+  @@unique([teamId, name])
+  @@index([teamId])
+}
+
+model Session {
+  id        String   @id @default(cuid())
+  tokenHash String   @unique
+  adminId   String?
+  teamId    String?
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+  admin     Admin?   @relation(fields: [adminId], references: [id], onDelete: Cascade)
+  team      Team?    @relation(fields: [teamId], references: [id], onDelete: Cascade)
+
+  @@index([adminId])
+  @@index([teamId])
+  @@index([expiresAt])
+}
+
+model LoginAudit {
+  id        String     @id @default(cuid())
+  actorType LoginActor
+  succeeded Boolean
+  teamId    String?
+  adminId   String?
+  createdAt DateTime   @default(now())
+  team      Team?      @relation(fields: [teamId], references: [id], onDelete: SetNull)
+  admin     Admin?     @relation(fields: [adminId], references: [id], onDelete: SetNull)
+
+  @@index([teamId, createdAt])
+  @@index([adminId, createdAt])
+  @@index([actorType, createdAt])
+}
+
+model Event {
+  id              String      @id @default("main")
+  title           String      @default("Cyber Heist")
+  status          EventStatus @default(DRAFT)
+  startsAt        DateTime?
+  endsAt          DateTime?
+  durationMinutes Int?
+  questionCounts  Json?
+  roundMarks      Json?
+  activeQuestionIds Json?
+  totalMarks      Int         @default(330)
+  resultsFinalized Boolean    @default(false)
+  finalizedAt     DateTime?
+  leaderboardReleased Boolean @default(false)
+  negativeMarkingEnabled Boolean @default(false)
+  negativeMarkingValue Int @default(0)
+  allowAnswerRevision Boolean @default(false)
+  studentScoreVisible Boolean @default(false)
+  correctnessFeedbackVisible Boolean @default(false)
+  liveLeaderboardVisible Boolean @default(false)
+  updatedAt       DateTime    @updatedAt
+  createdAt       DateTime    @default(now())
+}
+
+model Question {
+  id            String       @id @default(cuid())
+  code          String       @unique
+  level         Int
+  theme         String
+  category      String
+  topic         String
+  difficulty    String
+  questionText  String
+  options       Json?
+  correctAnswer String
+  points        Int
+  type          QuestionType @default(MCQ)
+  sortOrder     Int
+  published     Boolean      @default(false)
+  createdAt     DateTime     @default(now())
+  updatedAt     DateTime     @updatedAt
+  submissions   Submission[]
+
+  @@index([level, published, sortOrder])
+}
+
+model Submission {
+  id            String   @id @default(cuid())
+  teamId        String
+  questionId    String
+  answer        String
+  isCorrect     Boolean
+  awardedPoints Int      @default(0)
+  submittedAt   DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+  team          Team     @relation(fields: [teamId], references: [id], onDelete: Cascade)
+  question      Question @relation(fields: [questionId], references: [id], onDelete: Cascade)
+
+  @@unique([teamId, questionId])
+  @@index([teamId, submittedAt])
+  @@index([questionId])
+}
+
+model LevelProgress {
+  id          String   @id @default(cuid())
+  teamId      String
+  level       Int
+  score       Int
+  completedAt DateTime @default(now())
+  team        Team     @relation(fields: [teamId], references: [id], onDelete: Cascade)
+
+  @@unique([teamId, level])
+  @@index([level, completedAt])
+}
